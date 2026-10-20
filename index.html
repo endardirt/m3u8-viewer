@@ -597,7 +597,6 @@
       isMouseDownOnVideo = true;
       hasMovedMouseOrTimePassed = false;
 
-      // Trigger 2x speed if held down for more than 200ms (differentiating from regular click)
       clearTimeout(speedHoldTimer);
       speedHoldTimer = setTimeout(() => {
         if (isMouseDownOnVideo) {
@@ -617,7 +616,6 @@
 
     videoWrap.addEventListener("click", (e) => {
       if (video.readyState > 0 && e.target !== placeholder) {
-        // If it was a hold action rather than a quick click, don't toggle play/pause
         if (!hasMovedMouseOrTimePassed) {
           togglePlay();
         }
@@ -683,7 +681,7 @@
       }
     });
 
-    form.addEventListener("submit", (event) => {
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
 
       const url = urlInput.value.trim();
@@ -722,10 +720,16 @@
         fail("Could not load the video. Check the URL or stream access.");
       };
 
-      video.onloadedmetadata = () => {
+      video.onloadedmetadata = async () => {
         if (currentLoad !== loadId) return;
         setStatus("Stream ready", "ready");
         showPlaceholder(false);
+        try {
+          await video.play();
+        } catch (err) {
+          // Autoplay policy might block unmuted autoplay in some browsers if not interacted with, 
+          // but since it's triggered via form submit, it usually satisfies browser policies.
+        }
       };
 
       video.onplaying = () => {
@@ -760,6 +764,7 @@
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
         video.load();
+        try { await video.play(); } catch (_) {}
       } else if (isHls && window.Hls && Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
@@ -784,9 +789,11 @@
 
         hls.loadSource(url);
         hls.attachMedia(video);
+        try { await video.play(); } catch (_) {}
       } else {
         video.src = url;
         video.load();
+        try { await video.play(); } catch (_) {}
       }
     });
 
@@ -820,7 +827,6 @@
         if (event.code === "Space") {
           if (!event.repeat && !spacebarIsHeld) {
             spacebarIsHeld = true;
-            // If held down past 200ms, trigger 2x speed instead of play/pause
             clearTimeout(spacebarHoldTimer);
             spacebarHoldTimer = setTimeout(() => {
               if (spacebarIsHeld) {
@@ -847,7 +853,6 @@
           if (isHoldingSpeed) {
             disable2xSpeed();
           } else {
-            // It was just a quick tap, toggle play/pause
             togglePlay();
           }
         }
