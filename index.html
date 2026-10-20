@@ -142,6 +142,7 @@
       place-items: center;
       background: #000;
       cursor: pointer;
+      user-select: none;
     }
 
     video {
@@ -151,6 +152,28 @@
       inset: 0;
       object-fit: contain;
       outline: none;
+    }
+
+    .speed-indicator {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(0, 0, 0, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(4px);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+    }
+
+    .speed-indicator.visible {
+      opacity: 1;
     }
 
     .placeholder {
@@ -240,7 +263,6 @@
       height: 8px;
     }
 
-    /* Completely hide/remove the thumb */
     .seekbar::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
@@ -297,7 +319,6 @@
       border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    /* Auto-hide controls & cursor in fullscreen when inactive & playing */
     :fullscreen .player.hide-controls .player-bar {
       opacity: 0;
       visibility: hidden;
@@ -383,6 +404,7 @@
     <section class="player" id="playerSection" aria-label="Video player">
       <div class="video-wrap" id="videoWrap">
         <video id="video" playsinline preload="metadata"></video>
+        <div class="speed-indicator" id="speedIndicator">2.0× Speed</div>
 
         <div class="placeholder" id="placeholder">
           <div class="play-symbol">▶</div>
@@ -415,7 +437,8 @@
     <div class="help">
       <span><kbd>←</kbd> Back 5 seconds</span>
       <span><kbd>→</kbd> Forward 5 seconds</span>
-      <span><kbd>Space</kbd> Play / pause</span>
+      <span><kbd>Space (hold)</kbd> 2× Speed / (tap) Play-pause</span>
+      <span><kbd>Mouse Hold</kbd> 2× Speed</span>
       <span><kbd>F</kbd> Fullscreen</span>
     </div>
   </main>
@@ -438,11 +461,18 @@
     const seekBar = document.getElementById("seekBar");
     const currentTimeDisplay = document.getElementById("currentTimeDisplay");
     const durationDisplay = document.getElementById("durationDisplay");
+    const speedIndicator = document.getElementById("speedIndicator");
 
     let hls = null;
     let loadId = 0;
     let isSeeking = false;
     let hideControlsTimer = null;
+
+    // Fast-forward hold states
+    let isHoldingSpeed = false;
+    let speedHoldTimer = null;
+    let isMouseDownOnVideo = false;
+    let hasMovedMouseOrTimePassed = false;
 
     function setStatus(message, state = "") {
       statusText.textContent = message;
@@ -544,9 +574,54 @@
       }
     });
 
+    // Speed hold activation logic
+    function enable2xSpeed() {
+      if (video.readyState > 0 && !isHoldingSpeed) {
+        isHoldingSpeed = true;
+        video.playbackRate = 2.0;
+        speedIndicator.classList.add("visible");
+      }
+    }
+
+    function disable2xSpeed() {
+      if (isHoldingSpeed) {
+        isHoldingSpeed = false;
+        video.playbackRate = 1.0;
+        speedIndicator.classList.remove("visible");
+      }
+    }
+
+    // Mouse hold handlers on video wrapper
+    videoWrap.addEventListener("mousedown", (e) => {
+      if (video.readyState === 0 || e.target === placeholder) return;
+      isMouseDownOnVideo = true;
+      hasMovedMouseOrTimePassed = false;
+
+      // Trigger 2x speed if held down for more than 200ms (differentiating from regular click)
+      clearTimeout(speedHoldTimer);
+      speedHoldTimer = setTimeout(() => {
+        if (isMouseDownOnVideo) {
+          hasMovedMouseOrTimePassed = true;
+          enable2xSpeed();
+        }
+      }, 200);
+    });
+
+    window.addEventListener("mouseup", () => {
+      clearTimeout(speedHoldTimer);
+      if (isMouseDownOnVideo) {
+        isMouseDownOnVideo = false;
+        disable2xSpeed();
+      }
+    });
+
     videoWrap.addEventListener("click", (e) => {
       if (video.readyState > 0 && e.target !== placeholder) {
-        togglePlay();
+        // If it was a hold action rather than a quick click, don't toggle play/pause
+        if (!hasMovedMouseOrTimePassed) {
+          togglePlay();
+        }
+        hasMovedMouseOrTimePassed = false;
       }
     });
 
@@ -720,6 +795,10 @@
     playBtn.addEventListener("click", togglePlay);
     document.getElementById("fullscreenBtn").addEventListener("click", toggleFullscreen);
 
+    // Keyboard controls with Spacebar hold support
+    let spacebarHoldTimer = null;
+    let spacebarIsHeld = false;
+
     document.addEventListener("keydown", (event) => {
       const target = event.target;
       const tag = target.tagName;
@@ -739,7 +818,16 @@
         event.stopImmediatePropagation();
 
         if (event.code === "Space") {
-          togglePlay();
+          if (!event.repeat && !spacebarIsHeld) {
+            spacebarIsHeld = true;
+            // If held down past 200ms, trigger 2x speed instead of play/pause
+            clearTimeout(spacebarHoldTimer);
+            spacebarHoldTimer = setTimeout(() => {
+              if (spacebarIsHeld) {
+                enable2xSpeed();
+              }
+            }, 200);
+          }
         } else if (event.code === "ArrowLeft") {
           seek(-5);
         } else if (event.code === "ArrowRight") {
@@ -748,6 +836,21 @@
       } else if (event.code === "KeyF") {
         event.preventDefault();
         toggleFullscreen();
+      }
+    }, true);
+
+    document.addEventListener("keyup", (event) => {
+      if (event.code === "Space") {
+        clearTimeout(spacebarHoldTimer);
+        if (spacebarIsHeld) {
+          spacebarIsHeld = false;
+          if (isHoldingSpeed) {
+            disable2xSpeed();
+          } else {
+            // It was just a quick tap, toggle play/pause
+            togglePlay();
+          }
+        }
       }
     }, true);
 
