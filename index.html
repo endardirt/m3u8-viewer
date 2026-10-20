@@ -512,28 +512,38 @@
     playBtn.addEventListener("click", togglePlay);
     document.getElementById("fullscreenBtn").addEventListener("click", toggleFullscreen);
 
-    // Keep keyboard shortcuts from interfering with URL entry.
+    
     document.addEventListener("keydown", (event) => {
-      const tag = event.target.tagName;
-      const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(tag)
-        || event.target.isContentEditable;
-
+      const target = event.target;
+      const tag = target.tagName;
+      const typing =
+        ["INPUT", "TEXTAREA", "SELECT"].includes(tag) ||
+        target.isContentEditable;
+    
       if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
-
-      if (event.code === "Space") {
+    
+      if (
+        event.code === "Space" ||
+        event.code === "ArrowLeft" ||
+        event.code === "ArrowRight"
+      ) {
         event.preventDefault();
-        togglePlay();
-      } else if (event.code === "ArrowLeft") {
-        event.preventDefault();
-        seek(-5);
-      } else if (event.code === "ArrowRight") {
-        event.preventDefault();
-        seek(5);
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+    
+        if (event.code === "Space") {
+          togglePlay();
+        } else if (event.code === "ArrowLeft") {
+          seek(-5);
+        } else if (event.code === "ArrowRight") {
+          seek(5);
+        }
       } else if (event.code === "KeyF") {
         event.preventDefault();
         toggleFullscreen();
       }
-    });
+    }, true);
+
 
     // Allow sharing a stream through ?url=...
     const sharedUrl = new URLSearchParams(window.location.search).get("url");
