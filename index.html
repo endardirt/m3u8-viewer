@@ -149,16 +149,17 @@
       background: var(--panel);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 6px 10px 6px 6px;
+      padding: 6px 6px 6px 6px;
       border-radius: 8px;
       font-size: 12px;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 10px;
-      max-width: 280px;
+      max-width: 290px;
       text-align: left;
       transition: border-color 0.15s, background 0.15s;
+      position: relative;
     }
 
     .history-chip:hover {
@@ -180,6 +181,7 @@
       flex-direction: column;
       min-width: 0;
       gap: 2px;
+      flex: 1;
     }
 
     .history-url {
@@ -192,6 +194,26 @@
     .history-meta {
       font-size: 10px;
       color: var(--muted);
+    }
+
+    .history-remove-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+
+    .history-remove-btn:hover {
+      background: rgba(248, 113, 113, 0.15);
+      color: #f87171;
     }
 
     .player {
@@ -572,6 +594,13 @@
       renderHistory();
     }
 
+    function removeFromHistory(url) {
+      let history = getHistory();
+      history = history.filter(item => item.url !== url);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      renderHistory();
+    }
+
     function updateHistoryMeta() {
       if (!currentStreamUrl) return;
       const history = getHistory();
@@ -602,8 +631,7 @@
       }
       historyList.innerHTML = "";
       history.forEach(item => {
-        const chip = document.createElement("button");
-        chip.type = "button";
+        const chip = document.createElement("div");
         chip.className = "history-chip";
 
         const thumbImg = document.createElement("img");
@@ -625,8 +653,19 @@
         infoDiv.appendChild(urlSpan);
         infoDiv.appendChild(metaSpan);
 
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "history-remove-btn";
+        removeBtn.innerHTML = "✕";
+        removeBtn.title = "Remove from history";
+        removeBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          removeFromHistory(item.url);
+        });
+
         chip.appendChild(thumbImg);
         chip.appendChild(infoDiv);
+        chip.appendChild(removeBtn);
         chip.title = item.url;
 
         chip.addEventListener("click", () => {
@@ -1008,10 +1047,7 @@
         if (currentLoad === loadId) {
           setStatus("Playback ended");
           stopTimestampSaver();
-          let history = getHistory();
-          history = history.filter(item => item.url !== currentStreamUrl);
-          localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-          renderHistory();
+          removeFromHistory(currentStreamUrl);
         }
       };
 
