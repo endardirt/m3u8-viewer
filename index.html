@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -140,6 +139,7 @@
       display: grid;
       place-items: center;
       background: #000;
+      cursor: pointer;
     }
 
     video {
@@ -292,7 +292,8 @@
 
     <section class="player" aria-label="Video player">
       <div class="video-wrap" id="videoWrap">
-        <video id="video" controls playsinline preload="metadata"></video>
+        <!-- Removed native 'controls' attribute so browser default shortcuts don't interfere -->
+        <video id="video" playsinline preload="metadata"></video>
 
         <div class="placeholder" id="placeholder">
           <div class="play-symbol">▶</div>
@@ -408,6 +409,14 @@
       }
     }
 
+    // Clicking the video wrap toggles play/pause conveniently
+    videoWrap.addEventListener("click", (e) => {
+      // Don't trigger if they clicked directly on something else inside
+      if (video.readyState > 0 && e.target !== placeholder) {
+        togglePlay();
+      }
+    });
+
     form.addEventListener("submit", (event) => {
       event.preventDefault();
 
@@ -512,16 +521,15 @@
     playBtn.addEventListener("click", togglePlay);
     document.getElementById("fullscreenBtn").addEventListener("click", toggleFullscreen);
 
-    
     document.addEventListener("keydown", (event) => {
       const target = event.target;
       const tag = target.tagName;
       const typing =
         ["INPUT", "TEXTAREA", "SELECT"].includes(tag) ||
         target.isContentEditable;
-    
+
       if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
-    
+
       if (
         event.code === "Space" ||
         event.code === "ArrowLeft" ||
@@ -530,7 +538,7 @@
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-    
+
         if (event.code === "Space") {
           togglePlay();
         } else if (event.code === "ArrowLeft") {
@@ -543,7 +551,6 @@
         toggleFullscreen();
       }
     }, true);
-
 
     // Allow sharing a stream through ?url=...
     const sharedUrl = new URLSearchParams(window.location.search).get("url");
