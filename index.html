@@ -299,11 +299,15 @@
       border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    /* Auto-hide controls in fullscreen when inactive */
+    /* Auto-hide controls & cursor in fullscreen when inactive */
     :fullscreen .player.hide-controls .player-bar {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
+    }
+
+    :fullscreen .player.hide-controls {
+      cursor: none;
     }
 
     .help {
@@ -490,17 +494,17 @@
       playerSection.classList.remove("hide-controls");
       clearTimeout(hideControlsTimer);
       
-      // Only auto-hide if the video is currently playing
+      // Only auto-hide after 2 seconds if the video is currently playing
       if (!video.paused) {
         hideControlsTimer = setTimeout(() => {
           if (document.fullscreenElement && !video.paused) {
             playerSection.classList.add("hide-controls");
           }
-        }, 2500);
+        }, 2000);
       }
     }
 
-    // Mouse movement reveals controls in fullscreen
+    // Mouse movement reveals controls and cursor in fullscreen
     playerSection.addEventListener("mousemove", () => {
       showFullscreenControls();
     });
@@ -650,7 +654,7 @@
         if (video.currentTime > 0 && !video.ended) {
           setStatus("Paused", "ready");
         }
-        // Always show controls when paused in fullscreen
+        // Always show controls and cursor when paused in fullscreen
         playerSection.classList.remove("hide-controls");
         clearTimeout(hideControlsTimer);
       };
