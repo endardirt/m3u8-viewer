@@ -185,9 +185,9 @@
       height: 100%;
       display: grid;
       place-items: center;
-      color: var(--muted);
-      font-size: 14px;
-      background: #18181c;
+      color: var(--accent);
+      font-size: 18px;
+      background: linear-gradient(135deg, #18181c, #27272a);
     }
 
     .card-info {
@@ -489,7 +489,7 @@
 
     <section class="player" id="playerSection" aria-label="Video player">
       <div class="video-wrap" id="videoWrap">
-        <video id="video" playsinline preload="metadata"></video>
+        <video id="video" crossorigin="anonymous" playsinline preload="metadata"></video>
         <div class="speed-indicator" id="speedIndicator">2.0× Speed</div>
 
         <div class="placeholder" id="placeholder">
@@ -598,11 +598,14 @@
         const ctx = canvas.getContext("2d");
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        localStorage.setItem(`stream_thumb_${currentStreamUrl}`, dataUrl);
-        thumbnailCaptured = true;
-        renderHistory();
+        // Test if it's a valid data url
+        if (dataUrl && dataUrl.startsWith("data:image/")) {
+          localStorage.setItem(`stream_thumb_${currentStreamUrl}`, dataUrl);
+          thumbnailCaptured = true;
+          renderHistory();
+        }
       } catch (e) {
-        // May fail on certain strict cross-origin streams without proper CORS headers
+        // Tainted canvas security block - fallback will handle visual display
       }
     }
 
