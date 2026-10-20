@@ -299,7 +299,7 @@
       border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    /* Auto-hide controls & cursor in fullscreen when inactive */
+    /* Auto-hide controls & cursor in fullscreen when inactive & playing */
     :fullscreen .player.hide-controls .player-bar {
       opacity: 0;
       visibility: hidden;
@@ -646,6 +646,10 @@
         if (currentLoad !== loadId) return;
         setStatus("Playing", "ready");
         playBtn.textContent = "Ⅱ Pause";
+        // Start inactivity timer when playing in fullscreen
+        if (document.fullscreenElement) {
+          showFullscreenControls();
+        }
       };
 
       video.onpause = () => {
