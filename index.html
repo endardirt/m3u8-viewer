@@ -272,7 +272,7 @@
     .dot.ready { background: #4ade80; }
     .dot.error { background: #f87171; }
 
-    /* Thumb-less Seekbar Styling */
+    /* Custom Precision Seekbar Styling */
     .seekbar-wrap {
       flex: 1;
       display: flex;
@@ -282,36 +282,29 @@
       padding: 0 4px;
     }
 
-    .seekbar {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 100%;
+    .seekbar-track {
+      flex: 1;
       height: 6px;
-      background: linear-gradient(to right, var(--accent) var(--seek-val, 0%), #27272a var(--seek-val, 0%));
+      background: #27272a;
       border-radius: 3px;
-      outline: none;
+      position: relative;
       cursor: pointer;
       transition: height 0.15s ease;
+      overflow: hidden;
     }
 
-    .seekbar:hover {
+    .seekbar-track:hover {
       height: 8px;
     }
 
-    .seekbar::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 0;
-      height: 0;
-      background: transparent;
-      border: none;
-    }
-
-    .seekbar::-moz-range-thumb {
-      width: 0;
-      height: 0;
-      background: transparent;
-      border: none;
+    .seekbar-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 0%;
+      background: var(--accent);
+      pointer-events: none;
     }
 
     .time-display {
@@ -461,7 +454,9 @@
 
         <div class="seekbar-wrap">
           <span id="currentTimeDisplay" class="time-display">0:00</span>
-          <input type="range" id="seekBar" class="seekbar" value="0" min="0" max="100" step="0.1" />
+          <div class="seekbar-track" id="seekBarTrack">
+            <div class="seekbar-fill" id="seekBarFill"></div>
+          </div>
           <span id="durationDisplay" class="time-display">0:00</span>
         </div>
 
@@ -498,7 +493,8 @@
     const playBtn = document.getElementById("playBtn");
     const videoWrap = document.getElementById("videoWrap");
     const playerSection = document.getElementById("playerSection");
-    const seekBar = document.getElementById("seekBar");
+    const seekBarTrack = document.getElementById("seekBarTrack");
+    const seekBarFill = document.getElementById("seekBarFill");
     const currentTimeDisplay = document.getElementById("currentTimeDisplay");
     const durationDisplay = document.getElementById("durationDisplay");
     const speedIndicator = document.getElementById("speedIndicator");
@@ -532,10 +528,9 @@
 
     function saveToHistory(url) {
       let history = getHistory();
-      // Remove existing entry if present, then add to front
       history = history.filter(item => item !== url);
       history.unshift(url);
-      if (history.length > 8) history.pop(); // keep last 8
+      if (history.length > 8) history.pop();
       localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
       renderHistory();
     }
@@ -584,7 +579,6 @@
       }
     }
 
-    // Initialize history on load
     renderHistory();
 
     function setStatus(message, state = "") {
@@ -611,8 +605,8 @@
       return `${m}:${s < 10 ? "0" : ""}${s}`;
     }
 
-    function updateSeekBarFill(val) {
-      seekBar.style.setProperty('--seek-val', `${val}%`);
+    function updateSeekBarFill(percent) {
+      seekBarFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
     }
 
     function seek(seconds) {
@@ -743,31 +737,64 @@
       }
     });
 
-    // Seekbar event listeners
-    seekBar.addEventListener("input", () => {
-      isSeeking = true;
-      updateSeekBarFill(seekBar.value);
-      if (video.seekable.length) {
-        const start = video.seekable.start(0);
-        const end = video.seekable.end(video.seekable.length - 1);
-        const time = start + (seekBar.value / 100) * (end - start);
-        currentTimeDisplay.textContent = formatTime(time);
-      } else if (video.duration) {
-        const time = (seekBar.value / 100) * video.duration;
-        currentTimeDisplay.textContent = formatTime(time);
-      }
-    });
+    // Precision Seekbar Alignment Logic
+    function getPercentFromMouseEvent(e, trackRect) {
+      const x = e.clientX - trackRect.left;
+      return Math.max(0, Math.min(100, (x / trackRect.width) * 100));
+    }
 
-    seekBar.addEventListener("change", () => {
+    function applySeekFromPercent(percent) {
       if (video.readyState === 0) return;
       if (video.seekable.length) {
         const start = video.seekable.start(0);
         const end = video.seekable.end(video.seekable.length - 1);
-        video.currentTime = start + (seekBar.value / 100) * (end - start);
+        video.currentTime = start + (percent / 100) * (end - start);
       } else if (video.duration) {
-        video.currentTime = (seekBar.value / 100) * video.duration;
+        video.currentTime = (percent / 100) * video.duration;
       }
-      isSeeking = false;
+    }
+
+    function updatePreviewFromPercent(percent) {
+      if (video.readyState === 0) return;
+      if (video.seekable.length) {
+        const start = video.seekable.start(0);
+        const end = video.seekable.end(video.seekable.length - 1);
+        const time = start + (percent / 100) * (end - start);
+        currentTimeDisplay.textContent = formatTime(time - start);
+      } else if (video.duration) {
+        const time = (percent / 100) * video.duration;
+        currentTimeDisplay.textContent = formatTime(time);
+      }
+    }
+
+    seekBarTrack.addEventListener("mousedown", (e) => {
+      if (video.readyState === 0) return;
+      isSeeking = true;
+      const trackRect = seekBarTrack.getBoundingClientRect();
+      const percent = getPercentFromMouseEvent(e, trackRect);
+      
+      updateSeekBarFill(percent);
+      updatePreviewFromPercent(percent);
+      applySeekFromPercent(percent);
+
+      function onPointerMove(moveEvent) {
+        if (!isSeeking) return;
+        const movePercent = getPercentFromMouseEvent(moveEvent, trackRect);
+        updateSeekBarFill(movePercent);
+        updatePreviewFromPercent(movePercent);
+      }
+
+      function onPointerUp(upEvent) {
+        if (!isSeeking) return;
+        const finalPercent = getPercentFromMouseEvent(upEvent, trackRect);
+        applySeekFromPercent(finalPercent);
+        isSeeking = false;
+        window.removeEventListener("mousemove", onPointerMove);
+        window.removeEventListener("mouseup", onPointerUp);
+      }
+
+      window.addEventListener("mousemove", onPointerMove);
+      window.addEventListener("mouseup", onPointerUp);
     });
 
     video.addEventListener("timeupdate", () => {
@@ -782,13 +809,11 @@
         if (end > start) {
           percent = ((current - start) / (end - start)) * 100;
         }
-        seekBar.value = percent;
         updateSeekBarFill(percent);
         currentTimeDisplay.textContent = formatTime(current - start);
         durationDisplay.textContent = formatTime(end - start);
       } else if (video.duration) {
         percent = (video.currentTime / video.duration) * 100;
-        seekBar.value = percent;
         updateSeekBarFill(percent);
         currentTimeDisplay.textContent = formatTime(video.currentTime);
         durationDisplay.textContent = formatTime(video.duration);
@@ -822,7 +847,6 @@
       video.load();
       showPlaceholder(false);
       setStatus("Loading stream…");
-      seekBar.value = 0;
       updateSeekBarFill(0);
       currentTimeDisplay.textContent = "0:00";
       durationDisplay.textContent = "0:00";
@@ -874,7 +898,6 @@
         if (currentLoad !== loadId) return;
         playBtn.textContent = "▶ Play";
         stopTimestampSaver();
-        // Save timestamp immediately upon pausing
         if (currentStreamUrl && video.currentTime > 0) {
           localStorage.setItem(`stream_time_${currentStreamUrl}`, video.currentTime);
         }
