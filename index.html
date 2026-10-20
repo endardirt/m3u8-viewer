@@ -195,7 +195,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      min-width: 0;
+      flex-shrink: 0;
       color: var(--muted);
       font-size: 12px;
     }
@@ -210,6 +210,58 @@
 
     .dot.ready { background: #4ade80; }
     .dot.error { background: #f87171; }
+
+    /* Seekbar styling */
+    .seekbar-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      padding: 0 4px;
+    }
+
+    .seekbar {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: #27272a;
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .seekbar::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    .seekbar::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    .seekbar::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+
+    .time-display {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
 
     .controls {
       display: flex;
@@ -249,13 +301,18 @@
 
     [hidden] { display: none !important; }
 
+    @media (max-width: 720px) {
+      .seekbar-wrap { display: none; } /* Hide on very small screens if space is tight, or keep if desired */
+    }
+
     @media (max-width: 560px) {
       main { padding: 28px 14px; }
       header { padding: 16px; }
       .url-form { flex-direction: column; }
       .url-form button { padding: 13px; }
-      .player-bar { align-items: flex-start; }
+      .player-bar { align-items: flex-start; flex-wrap: wrap; }
       .status { padding-top: 8px; }
+      .seekbar-wrap { width: 100%; order: 3; padding: 4px 0 0 0; display: flex; }
       .controls button { padding: 9px; }
     }
   </style>
@@ -292,7 +349,6 @@
 
     <section class="player" aria-label="Video player">
       <div class="video-wrap" id="videoWrap">
-        <!-- Removed native 'controls' attribute so browser default shortcuts don't interfere -->
         <video id="video" playsinline preload="metadata"></video>
 
         <div class="placeholder" id="placeholder">
@@ -306,6 +362,12 @@
         <div class="status" role="status" aria-live="polite">
           <span class="dot" id="statusDot"></span>
           <span id="statusText">Waiting for a stream</span>
+        </div>
+
+        <div class="seekbar-wrap">
+          <span id="currentTimeDisplay" class="time-display">0:00</span>
+          <input type="range" id="seekBar" class="seekbar" value="0" min="0" max="100" step="0.1" />
+          <span id="durationDisplay" class="time-display">0:00</span>
         </div>
 
         <div class="controls">
@@ -339,9 +401,13 @@
     const statusDot = document.getElementById("statusDot");
     const playBtn = document.getElementById("playBtn");
     const videoWrap = document.getElementById("videoWrap");
+    const seekBar = document.getElementById("seekBar");
+    const currentTimeDisplay = document.getElementById("currentTimeDisplay");
+    const durationDisplay = document.getElementById("durationDisplay");
 
     let hls = null;
     let loadId = 0;
+    let isSeeking = false;
 
     function setStatus(message, state = "") {
       statusText.textContent = message;
@@ -359,12 +425,18 @@
       }
     }
 
+    function formatTime(seconds) {
+      if (isNaN(seconds) || !Number.isFinite(seconds)) return "0:00";
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m}:${s < 10 ? "0" : ""}${s}`;
+    }
+
     function seek(seconds) {
       if (video.readyState === 0) return;
 
       let target = video.currentTime + seconds;
 
-      // Respect the seekable window of live streams.
       if (video.seekable.length) {
         const start = video.seekable.start(0);
         const end = video.seekable.end(video.seekable.length - 1);
@@ -377,9 +449,7 @@
 
       try {
         video.currentTime = target;
-      } catch (_) {
-        // Some live streams temporarily disallow seeking.
-      }
+      } catch (_) {}
     }
 
     async function togglePlay() {
@@ -401,7 +471,6 @@
         } else if (videoWrap.requestFullscreen) {
           await videoWrap.requestFullscreen();
         } else if (video.webkitEnterFullscreen) {
-          // Safari fallback for iPhone.
           video.webkitEnterFullscreen();
         }
       } catch (error) {
@@ -409,11 +478,57 @@
       }
     }
 
-    // Clicking the video wrap toggles play/pause conveniently
     videoWrap.addEventListener("click", (e) => {
-      // Don't trigger if they clicked directly on something else inside
       if (video.readyState > 0 && e.target !== placeholder) {
         togglePlay();
+      }
+    });
+
+    // Seekbar event listeners
+    seekBar.addEventListener("input", () => {
+      isSeeking = true;
+      if (video.seekable.length) {
+        const start = video.seekable.start(0);
+        const end = video.seekable.end(video.seekable.length - 1);
+        const time = start + (seekBar.value / 100) * (end - start);
+        currentTimeDisplay.textContent = formatTime(time);
+      } else if (video.duration) {
+        const time = (seekBar.value / 100) * video.duration;
+        currentTimeDisplay.textContent = formatTime(time);
+      }
+    });
+
+    seekBar.addEventListener("change", () => {
+      if (video.readyState === 0) return;
+      if (video.seekable.length) {
+        const start = video.seekable.start(0);
+        const end = video.seekable.end(video.seekable.length - 1);
+        video.currentTime = start + (seekBar.value / 100) * (end - start);
+      } else if (video.duration) {
+        video.currentTime = (seekBar.value / 100) * video.duration;
+      }
+      isSeeking = false;
+    });
+
+    video.addEventListener("timeupdate", () => {
+      if (isSeeking || video.readyState === 0) return;
+
+      if (video.seekable.length) {
+        const start = video.seekable.start(0);
+        const end = video.seekable.end(video.seekable.length - 1);
+        const current = video.currentTime;
+        
+        if (end > start) {
+          seekBar.value = ((current - start) / (end - start)) * 100;
+        } else {
+          seekBar.value = 0;
+        }
+        currentTimeDisplay.textContent = formatTime(current - start);
+        durationDisplay.textContent = formatTime(end - start);
+      } else if (video.duration) {
+        seekBar.value = (video.currentTime / video.duration) * 100;
+        currentTimeDisplay.textContent = formatTime(video.currentTime);
+        durationDisplay.textContent = formatTime(video.duration);
       }
     });
 
@@ -441,6 +556,9 @@
       video.load();
       showPlaceholder(false);
       setStatus("Loading stream…");
+      seekBar.value = 0;
+      currentTimeDisplay.textContent = "0:00";
+      durationDisplay.textContent = "0:00";
 
       function fail(message) {
         if (currentLoad !== loadId) return;
@@ -482,7 +600,6 @@
 
       const isHls = /\.m3u8(?:$|[?#])/i.test(parsed.pathname + parsed.search);
 
-      // Safari and some other browsers support HLS natively.
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
         video.load();
@@ -552,7 +669,6 @@
       }
     }, true);
 
-    // Allow sharing a stream through ?url=...
     const sharedUrl = new URLSearchParams(window.location.search).get("url");
     if (sharedUrl) {
       urlInput.value = sharedUrl;
