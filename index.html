@@ -489,7 +489,7 @@
 
     <section class="player" id="playerSection" aria-label="Video player">
       <div class="video-wrap" id="videoWrap">
-        <video id="video" crossorigin="anonymous" playsinline preload="metadata"></video>
+        <video id="video" playsinline preload="metadata"></video>
         <div class="speed-indicator" id="speedIndicator">2.0× Speed</div>
 
         <div class="placeholder" id="placeholder">
@@ -598,14 +598,13 @@
         const ctx = canvas.getContext("2d");
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        // Test if it's a valid data url
         if (dataUrl && dataUrl.startsWith("data:image/")) {
           localStorage.setItem(`stream_thumb_${currentStreamUrl}`, dataUrl);
           thumbnailCaptured = true;
           renderHistory();
         }
       } catch (e) {
-        // Tainted canvas security block - fallback will handle visual display
+        // Handled silently if cross-origin blocks canvas snapshot
       }
     }
 
