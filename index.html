@@ -131,6 +131,33 @@
       border: 1px solid var(--border);
       border-radius: 14px;
       background: #000;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Fullscreen styling for the entire .player element */
+    .player:fullscreen {
+      width: 100vw;
+      height: 100vh;
+      max-width: none;
+      border: none;
+      border-radius: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .player:-webkit-full-screen {
+      width: 100vw;
+      height: 100vh;
+      max-width: none;
+      border: none;
+      border-radius: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
 
     .video-wrap {
@@ -140,6 +167,15 @@
       place-items: center;
       background: #000;
       cursor: pointer;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .player:fullscreen .video-wrap,
+    .player:-webkit-full-screen .video-wrap {
+      aspect-ratio: auto;
+      width: 100%;
+      height: 100%;
     }
 
     video {
@@ -186,9 +222,11 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 12px 14px;
+      padding: 14px 18px;
       background: #111113;
       border-top: 1px solid #222226;
+      flex-shrink: 0;
+      z-index: 10;
     }
 
     .status {
@@ -216,9 +254,9 @@
       flex: 1;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       min-width: 0;
-      padding: 0 4px;
+      padding: 0 8px;
     }
 
     .seekbar {
@@ -235,8 +273,8 @@
     .seekbar::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       background: var(--accent);
       cursor: pointer;
@@ -248,8 +286,8 @@
     }
 
     .seekbar::-moz-range-thumb {
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       border: none;
       border-radius: 50%;
       background: var(--accent);
@@ -257,7 +295,7 @@
     }
 
     .time-display {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--muted);
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
@@ -265,11 +303,11 @@
 
     .controls {
       display: flex;
-      gap: 7px;
+      gap: 8px;
       flex-shrink: 0;
     }
 
-    .controls button { padding: 8px 11px; }
+    .controls button { padding: 9px 13px; }
 
     .help {
       margin-top: 20px;
@@ -301,8 +339,8 @@
 
     [hidden] { display: none !important; }
 
-    @media (max-width: 720px) {
-      .seekbar-wrap { display: none; } /* Hide on very small screens if space is tight, or keep if desired */
+    @media (max-width: 760px) {
+      .seekbar-wrap { max-width: 200px; }
     }
 
     @media (max-width: 560px) {
@@ -347,7 +385,8 @@
       <button class="primary" type="submit">Load stream →</button>
     </form>
 
-    <section class="player" aria-label="Video player">
+    <!-- Fullscreen is applied to this .player element so the control bar stays visible -->
+    <section class="player" id="playerContainer" aria-label="Video player">
       <div class="video-wrap" id="videoWrap">
         <video id="video" playsinline preload="metadata"></video>
 
@@ -401,6 +440,7 @@
     const statusDot = document.getElementById("statusDot");
     const playBtn = document.getElementById("playBtn");
     const videoWrap = document.getElementById("videoWrap");
+    const playerContainer = document.getElementById("playerContainer");
     const seekBar = document.getElementById("seekBar");
     const currentTimeDisplay = document.getElementById("currentTimeDisplay");
     const durationDisplay = document.getElementById("durationDisplay");
@@ -468,8 +508,8 @@
       try {
         if (document.fullscreenElement) {
           await document.exitFullscreen();
-        } else if (videoWrap.requestFullscreen) {
-          await videoWrap.requestFullscreen();
+        } else if (playerContainer.requestFullscreen) {
+          await playerContainer.requestFullscreen();
         } else if (video.webkitEnterFullscreen) {
           video.webkitEnterFullscreen();
         }
@@ -484,7 +524,6 @@
       }
     });
 
-    // Seekbar event listeners
     seekBar.addEventListener("input", () => {
       isSeeking = true;
       if (video.seekable.length) {
