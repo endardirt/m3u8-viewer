@@ -595,13 +595,13 @@
 
     function saveToHistory(url, thumb = "", time = 0) {
       let history = getHistory();
-      // Keep existing thumbnail if a new one isn't provided
-      if (!thumb) {
-        const existing = history.find(item => item.url === url);
-        if (existing && existing.thumb) {
-          thumb = existing.thumb;
-        }
+      const existing = history.find(item => item.url === url);
+
+      // If no new thumbnail is passed, keep the existing one if available
+      if (!thumb && existing && existing.thumb) {
+        thumb = existing.thumb;
       }
+
       history = history.filter(item => item.url !== url);
       history.unshift({ url, thumb, time });
       if (history.length > 8) history.pop();
@@ -620,7 +620,14 @@
       if (!currentStreamUrl) return;
       const history = getHistory();
       const existing = history.find(item => item.url === currentStreamUrl);
-      const thumb = existing ? existing.thumb : "";
+      
+      // Try to capture a thumbnail if we don't have one yet
+      let thumb = existing ? existing.thumb : "";
+      if (!thumb || thumb.includes("data:image/svg+xml")) {
+        const freshThumb = captureThumbnail();
+        if (freshThumb) thumb = freshThumb;
+      }
+
       saveToHistory(currentStreamUrl, thumb, video.currentTime);
     }
 
@@ -1028,17 +1035,19 @@
         playBtn.textContent = "Ⅱ Pause";
         startTimestampSaver();
 
-        // Capture thumbnail shortly after playing starts and frames are rendering
-        setTimeout(() => {
-          if (currentLoad === loadId) {
-            const thumb = captureThumbnail();
-            if (thumb) {
-              const history = getHistory();
-              const existing = history.find(item => item.url === currentStreamUrl);
-              saveToHistory(currentStreamUrl, thumb, existing ? existing.time : video.currentTime);
-            }
+        // Attempt multiple quick thumbnail captures until it succeeds
+        const tryCapture = (attempt = 1) => {
+          if (currentLoad !== loadId) return;
+          const thumb = captureThumbnail();
+          if (thumb) {
+            const history = getHistory();
+            const existing = history.find(item => item.url === currentStreamUrl);
+            saveToHistory(currentStreamUrl, thumb, existing ? existing.time : video.currentTime);
+          } else if (attempt < 5) {
+            setTimeout(() => tryCapture(attempt + 1), 600 * attempt);
           }
-        }, 1200);
+        };
+        tryCapture();
 
         if (document.fullscreenElement) {
           showFullscreenControls();
