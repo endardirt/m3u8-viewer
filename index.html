@@ -128,103 +128,122 @@
 
     /* Recent History Section */
     .history-wrap {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
       margin-bottom: 24px;
     }
 
     .history-label {
+      display: block;
       font-size: 12px;
       color: var(--muted);
+      margin-bottom: 10px;
     }
 
     .history-list {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
       gap: 12px;
     }
 
     .history-card {
+      position: relative;
       background: var(--panel);
       border: 1px solid var(--border);
-      color: var(--text);
       border-radius: 10px;
-      width: 210px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
       overflow: hidden;
+      cursor: pointer;
       transition: border-color 0.15s, background 0.15s, transform 0.15s;
-      position: relative;
+      outline: none;
     }
 
-    .history-card:hover {
+    .history-card:hover,
+    .history-card:focus-visible {
       border-color: var(--accent);
       background: #1c1c21;
-    }
-
-    .history-thumb-wrap {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 16 / 9;
-      background: #000;
+      transform: translateY(-1px);
     }
 
     .history-thumb {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      display: grid;
+      place-items: center;
+      color: #52525b;
+      font-size: 20px;
+      overflow: hidden;
+    }
+
+    .history-thumb img {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
 
-    .history-remove-btn {
+    .history-badge {
       position: absolute;
-      top: 6px;
       right: 6px;
-      background: rgba(0, 0, 0, 0.7);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      bottom: 8px;
+      background: rgba(0, 0, 0, 0.8);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
       color: var(--text);
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      font-size: 12px;
-      line-height: 1;
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-      opacity: 0;
     }
 
-    .history-card:hover .history-remove-btn {
-      opacity: 1;
+    .history-progress {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.15);
     }
 
-    .history-remove-btn:hover {
-      background: #f87171;
-      border-color: #f87171;
-      color: #fff;
-    }
-
-    .history-details {
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
+    .history-progress > div {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
     }
 
     .history-url {
-      font-size: 12px;
-      font-weight: 500;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: var(--muted);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      color: var(--text);
     }
 
-    .history-meta {
-      font-size: 11px;
-      color: var(--muted);
+    .history-remove {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.7);
+      border-color: rgba(255, 255, 255, 0.2);
+      font-size: 13px;
+      line-height: 1;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s;
+      z-index: 2;
+    }
+
+    .history-card:hover .history-remove,
+    .history-remove:focus-visible { opacity: 1; }
+
+    .history-remove:hover { background: #f87171; border-color: #f87171; }
+
+    @media (hover: none) {
+      .history-remove { opacity: 1; }
     }
 
     .player {
@@ -458,11 +477,11 @@
       header { padding: 16px; }
       .url-form { flex-direction: column; }
       .url-form button { padding: 13px; }
+      .history-list { grid-template-columns: repeat(2, 1fr); }
       .player-bar { align-items: flex-start; flex-wrap: wrap; }
       .status { padding-top: 8px; }
       .seekbar-wrap { width: 100%; order: 3; padding: 4px 0 0 0; display: flex; }
       .controls button { padding: 9px; }
-      .history-card { width: 100%; }
     }
   </style>
 </head>
@@ -497,7 +516,7 @@
     </form>
 
     <div class="history-wrap" id="historyWrap" hidden>
-      <span class="history-label">Recent streams:</span>
+      <span class="history-label">Recent</span>
       <div class="history-list" id="historyList"></div>
     </div>
 
@@ -581,127 +600,213 @@
     let isMouseDownOnVideo = false;
     let hasMovedMouseOrTimePassed = false;
 
-    // LocalStorage History & Timestamp Management
+    // ---------- History, thumbnails & resume timestamps ----------
     const HISTORY_KEY = "stream_player_history";
+    const META_PREFIX = "stream_meta_";
+    const TIME_PREFIX = "stream_time_";
+    const THUMB_WIDTH = 320;
+
+    // url -> { card, img, badge, bar, placeholderIcon } for live updates
+    const cardRefs = new Map();
+
+    const thumbCanvas = document.createElement("canvas");
 
     function getHistory() {
       try {
         const data = localStorage.getItem(HISTORY_KEY);
-        return data ? JSON.parse(data) : [];
+        const parsed = data ? JSON.parse(data) : [];
+        return Array.isArray(parsed) ? parsed.filter(i => typeof i === "string") : [];
       } catch {
         return [];
       }
     }
 
-    function saveToHistory(url, thumb = "", time = 0) {
-      let history = getHistory();
-      const existing = history.find(item => item.url === url);
-
-      // If no new thumbnail is passed, keep the existing one if available
-      if (!thumb && existing && existing.thumb) {
-        thumb = existing.thumb;
+    function getMeta(url) {
+      try {
+        const raw = localStorage.getItem(META_PREFIX + url);
+        return raw ? JSON.parse(raw) : {};
+      } catch {
+        return {};
       }
+    }
 
-      history = history.filter(item => item.url !== url);
-      history.unshift({ url, thumb, time });
-      if (history.length > 8) history.pop();
+    function setMeta(url, patch) {
+      const meta = { ...getMeta(url), ...patch };
+      try {
+        localStorage.setItem(META_PREFIX + url, JSON.stringify(meta));
+      } catch {
+        // Quota exceeded: retry without the thumbnail so progress still saves
+        try {
+          delete meta.thumb;
+          localStorage.setItem(META_PREFIX + url, JSON.stringify(meta));
+        } catch {}
+      }
+      return meta;
+    }
+
+    function saveToHistory(url) {
+      let history = getHistory();
+      history = history.filter(item => item !== url);
+      history.unshift(url);
+      while (history.length > 8) {
+        const removed = history.pop();
+        localStorage.removeItem(META_PREFIX + removed);
+        localStorage.removeItem(TIME_PREFIX + removed);
+      }
       localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
       renderHistory();
     }
 
     function removeFromHistory(url) {
-      let history = getHistory();
-      history = history.filter(item => item.url !== url);
+      const history = getHistory().filter(item => item !== url);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      localStorage.removeItem(META_PREFIX + url);
+      localStorage.removeItem(TIME_PREFIX + url);
       renderHistory();
     }
 
-    function updateHistoryMeta() {
-      if (!currentStreamUrl) return;
-      const history = getHistory();
-      const existing = history.find(item => item.url === currentStreamUrl);
-      
-      // Try to capture a thumbnail if we don't have one yet
-      let thumb = existing ? existing.thumb : "";
-      if (!thumb || thumb.includes("data:image/svg+xml")) {
-        const freshThumb = captureThumbnail();
-        if (freshThumb) thumb = freshThumb;
+    // Grab the current frame as a small JPEG. Returns null if the canvas is
+    // tainted (stream without CORS headers) or no frame is available yet.
+    function captureThumbnail() {
+      if (!video.videoWidth || !video.videoHeight || video.readyState < 2) return null;
+      try {
+        const w = THUMB_WIDTH;
+        const h = Math.round((video.videoHeight / video.videoWidth) * w);
+        thumbCanvas.width = w;
+        thumbCanvas.height = h;
+        thumbCanvas.getContext("2d").drawImage(video, 0, 0, w, h);
+        return thumbCanvas.toDataURL("image/jpeg", 0.6);
+      } catch {
+        return null;
       }
-
-      saveToHistory(currentStreamUrl, thumb, video.currentTime);
     }
 
-    function captureThumbnail() {
-      if (video.videoWidth === 0 || video.videoHeight === 0) return "";
+    function saveProgress({ withThumb = true } = {}) {
+      if (!currentStreamUrl || !video || video.currentTime <= 0) return;
+      const patch = {
+        time: video.currentTime,
+        finished: false,
+        updated: Date.now()
+      };
+      if (Number.isFinite(video.duration)) patch.duration = video.duration;
+      if (withThumb) {
+        const thumb = captureThumbnail();
+        if (thumb) patch.thumb = thumb;
+      }
       try {
-        const canvas = document.createElement("canvas");
-        canvas.width = 320;
-        canvas.height = 180;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        return canvas.toDataURL("image/jpeg", 0.7);
-      } catch {
-        return "";
+        localStorage.setItem(TIME_PREFIX + currentStreamUrl, video.currentTime);
+      } catch {}
+      const meta = setMeta(currentStreamUrl, patch);
+      updateCard(currentStreamUrl, meta);
+    }
+
+    function updateCard(url, meta = getMeta(url)) {
+      const ref = cardRefs.get(url);
+      if (!ref) return;
+
+      if (meta.thumb) {
+        ref.img.src = meta.thumb;
+        ref.img.hidden = false;
+        ref.icon.hidden = true;
+      } else {
+        ref.img.hidden = true;
+        ref.icon.hidden = false;
+      }
+
+      if (meta.finished) {
+        ref.badge.textContent = "Watched";
+        ref.badge.hidden = false;
+        ref.bar.style.width = "100%";
+      } else if (meta.time > 2) {
+        ref.badge.textContent = meta.duration
+          ? `${formatTime(meta.time)} / ${formatTime(meta.duration)}`
+          : formatTime(meta.time);
+        ref.badge.hidden = false;
+        ref.bar.style.width = meta.duration
+          ? `${Math.min(100, (meta.time / meta.duration) * 100)}%`
+          : "0%";
+      } else {
+        ref.badge.hidden = true;
+        ref.bar.style.width = "0%";
       }
     }
 
     function renderHistory() {
       const history = getHistory();
+      cardRefs.clear();
+
       if (history.length === 0) {
+        historyList.innerHTML = "";
         historyWrap.hidden = true;
         return;
       }
+
       historyList.innerHTML = "";
-      history.forEach(item => {
+
+      history.forEach(url => {
         const card = document.createElement("div");
         card.className = "history-card";
+        card.tabIndex = 0;
+        card.setAttribute("role", "button");
+        card.title = url;
 
-        const thumbWrap = document.createElement("div");
-        thumbWrap.className = "history-thumb-wrap";
+        const thumb = document.createElement("div");
+        thumb.className = "history-thumb";
 
-        const thumbImg = document.createElement("img");
-        thumbImg.className = "history-thumb";
-        thumbImg.src = item.thumb || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180' viewBox='0 0 320 180'%3E%3Crect width='320' height='180' fill='%23111'/%3E%3C/svg%3E";
-        thumbImg.alt = "";
+        const icon = document.createElement("span");
+        icon.textContent = "▶";
 
-        const removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "history-remove-btn";
-        removeBtn.innerHTML = "✕";
-        removeBtn.title = "Remove from history";
-        removeBtn.addEventListener("click", (e) => {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.loading = "lazy";
+        img.hidden = true;
+
+        const badge = document.createElement("span");
+        badge.className = "history-badge";
+        badge.hidden = true;
+
+        const progress = document.createElement("div");
+        progress.className = "history-progress";
+        const bar = document.createElement("div");
+        progress.appendChild(bar);
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "history-remove";
+        remove.title = "Remove from history";
+        remove.setAttribute("aria-label", "Remove from history");
+        remove.textContent = "×";
+        remove.addEventListener("click", (e) => {
           e.stopPropagation();
-          removeFromHistory(item.url);
+          removeFromHistory(url);
         });
 
-        thumbWrap.appendChild(thumbImg);
-        thumbWrap.appendChild(removeBtn);
+        thumb.append(icon, img, badge, progress, remove);
 
-        const detailsDiv = document.createElement("div");
-        detailsDiv.className = "history-details";
+        const label = document.createElement("div");
+        label.className = "history-url";
+        label.textContent = url;
 
-        const urlSpan = document.createElement("span");
-        urlSpan.className = "history-url";
-        urlSpan.textContent = item.url;
-        urlSpan.title = item.url;
+        card.append(thumb, label);
 
-        const metaSpan = document.createElement("span");
-        metaSpan.className = "history-meta";
-        metaSpan.textContent = item.time > 0 ? `Left off at ${formatTime(item.time)}` : "Not started";
-
-        detailsDiv.appendChild(urlSpan);
-        detailsDiv.appendChild(metaSpan);
-
-        card.appendChild(thumbWrap);
-        card.appendChild(detailsDiv);
-
-        card.addEventListener("click", () => {
-          urlInput.value = item.url;
+        const open = () => {
+          urlInput.value = url;
           form.requestSubmit();
+        };
+        card.addEventListener("click", open);
+        card.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            open();
+          }
         });
 
         historyList.appendChild(card);
+        cardRefs.set(url, { card, img, icon, badge, bar });
+        updateCard(url);
       });
+
       historyWrap.hidden = false;
     }
 
@@ -709,7 +814,7 @@
       clearInterval(saveTimeInterval);
       saveTimeInterval = setInterval(() => {
         if (currentStreamUrl && video && !video.paused && !video.ended && video.currentTime > 0) {
-          updateHistoryMeta();
+          saveProgress();
         }
       }, 3000);
     }
@@ -719,10 +824,21 @@
     }
 
     function getSavedTimestamp(url) {
-      const history = getHistory();
-      const found = history.find(item => item.url === url);
-      return found ? found.time : 0;
+      try {
+        const val = localStorage.getItem(TIME_PREFIX + url);
+        return val ? parseFloat(val) : 0;
+      } catch {
+        return 0;
+      }
     }
+
+    // Save progress if the tab is hidden or closed mid-playback
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && !video.paused) saveProgress();
+    });
+    window.addEventListener("pagehide", () => {
+      if (!video.paused && !video.ended) saveProgress();
+    });
 
     renderHistory();
 
@@ -745,9 +861,12 @@
 
     function formatTime(seconds) {
       if (isNaN(seconds) || !Number.isFinite(seconds)) return "0:00";
-      const m = Math.floor(seconds / 60);
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
       const s = Math.floor(seconds % 60);
-      return `${m}:${s < 10 ? "0" : ""}${s}`;
+      const ss = s < 10 ? "0" + s : s;
+      if (h > 0) return `${h}:${m < 10 ? "0" : ""}${m}:${ss}`;
+      return `${m}:${ss}`;
     }
 
     function updateSeekBarFill(percent) {
@@ -982,8 +1101,13 @@
         return;
       }
 
+      // Save progress of whatever was playing before switching streams
+      if (currentStreamUrl && currentStreamUrl !== url && video.currentTime > 0) {
+        saveProgress();
+      }
+
       currentStreamUrl = url;
-      saveToHistory(url, "", getSavedTimestamp(url));
+      saveToHistory(url);
 
       const currentLoad = ++loadId;
       destroyHls();
@@ -1034,21 +1158,6 @@
         setStatus("Playing", "ready");
         playBtn.textContent = "Ⅱ Pause";
         startTimestampSaver();
-
-        // Attempt multiple quick thumbnail captures until it succeeds
-        const tryCapture = (attempt = 1) => {
-          if (currentLoad !== loadId) return;
-          const thumb = captureThumbnail();
-          if (thumb) {
-            const history = getHistory();
-            const existing = history.find(item => item.url === currentStreamUrl);
-            saveToHistory(currentStreamUrl, thumb, existing ? existing.time : video.currentTime);
-          } else if (attempt < 5) {
-            setTimeout(() => tryCapture(attempt + 1), 600 * attempt);
-          }
-        };
-        tryCapture();
-
         if (document.fullscreenElement) {
           showFullscreenControls();
         }
@@ -1058,8 +1167,8 @@
         if (currentLoad !== loadId) return;
         playBtn.textContent = "▶ Play";
         stopTimestampSaver();
-        if (currentStreamUrl && video.currentTime > 0) {
-          updateHistoryMeta();
+        if (currentStreamUrl && video.currentTime > 0 && !video.ended) {
+          saveProgress();
         }
         if (video.currentTime > 0 && !video.ended) {
           setStatus("Paused", "ready");
@@ -1076,7 +1185,9 @@
         if (currentLoad === loadId) {
           setStatus("Playback ended");
           stopTimestampSaver();
-          removeFromHistory(currentStreamUrl);
+          localStorage.removeItem(TIME_PREFIX + currentStreamUrl);
+          const meta = setMeta(currentStreamUrl, { time: 0, finished: true, updated: Date.now() });
+          updateCard(currentStreamUrl, meta);
         }
       };
 
@@ -1138,6 +1249,9 @@
         target.isContentEditable;
 
       if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
+
+      // Let Enter/Space activate focused history cards (handled on the card)
+      if (target.classList && target.classList.contains("history-card")) return;
 
       if (
         event.code === "Space" ||
