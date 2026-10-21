@@ -331,55 +331,66 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 12px 14px;
+      padding: 6px 12px;
       background: #111113;
       border-top: 1px solid #222226;
       transition: opacity 0.3s ease, visibility 0.3s ease;
     }
 
-    .status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-shrink: 0;
-      color: var(--muted);
+    .status-toast {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 5;
+      max-width: calc(100% - 32px);
+      background: rgba(0, 0, 0, 0.75);
+      border: 1px solid rgba(248, 113, 113, 0.4);
+      color: #fca5a5;
+      padding: 6px 12px;
+      border-radius: 6px;
       font-size: 12px;
+      pointer-events: none;
     }
 
-    .dot {
+    .icon-btn {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
       flex-shrink: 0;
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #71717a;
     }
 
-    .dot.ready { background: #4ade80; }
-    .dot.error { background: #f87171; }
+    .icon-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
 
-    /* Custom Precision Seekbar Styling */
+    /* Seekbar: just a track, a fill and a draggable knob */
     .seekbar-wrap {
       flex: 1;
+      min-width: 0;
       display: flex;
       align-items: center;
-      gap: 10px;
-      min-width: 0;
-      padding: 0 4px;
+      padding: 12px 8px;
+      cursor: pointer;
+      touch-action: none;
+      user-select: none;
     }
 
     .seekbar-track {
-      flex: 1;
-      height: 6px;
-      background: #27272a;
-      border-radius: 3px;
       position: relative;
-      cursor: pointer;
+      flex: 1;
+      height: 4px;
+      background: #2e2e34;
+      border-radius: 999px;
       transition: height 0.15s ease;
-      overflow: hidden;
     }
 
-    .seekbar-track:hover {
-      height: 8px;
+    .seekbar-wrap:hover .seekbar-track,
+    .seekbar-wrap.dragging .seekbar-track {
+      height: 6px;
     }
 
     .seekbar-fill {
@@ -389,11 +400,33 @@
       bottom: 0;
       width: 0%;
       background: var(--accent);
+      border-radius: inherit;
       pointer-events: none;
     }
 
+    .seekbar-knob {
+      position: absolute;
+      top: 50%;
+      left: 0%;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 0 2px var(--accent), 0 2px 6px rgba(0, 0, 0, 0.5);
+      transform: translate(-50%, -50%);
+      transition: transform 0.15s ease;
+      pointer-events: none;
+    }
+
+    .seekbar-wrap:hover .seekbar-knob,
+    .seekbar-wrap.dragging .seekbar-knob {
+      transform: translate(-50%, -50%) scale(1.25);
+    }
+
     .time-display {
-      font-size: 11px;
+      flex-shrink: 0;
+      padding: 0 4px;
+      font-size: 12px;
       color: var(--muted);
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
@@ -401,27 +434,25 @@
 
     .controls {
       display: flex;
-      gap: 7px;
+      gap: 6px;
       flex-shrink: 0;
     }
 
-    .controls button { padding: 8px 11px; }
-
     /* Fullscreen Mode Overrides */
-    :fullscreen .player {
+    .player:fullscreen {
       width: 100vw;
       height: 100vh;
       border: none;
       border-radius: 0;
     }
 
-    :fullscreen .video-wrap {
+    .player:fullscreen .video-wrap {
       width: 100%;
       height: 100%;
       aspect-ratio: unset;
     }
 
-    :fullscreen .player-bar {
+    .player:fullscreen .player-bar {
       position: absolute;
       bottom: 0;
       left: 0;
@@ -432,14 +463,16 @@
       border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    :fullscreen .player.hide-controls .player-bar {
+    /* Idle in fullscreen: hide the bar and the mouse cursor everywhere */
+    .player:fullscreen.hide-controls .player-bar {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
     }
 
-    :fullscreen .player.hide-controls {
-      cursor: none;
+    .player:fullscreen.hide-controls,
+    .player:fullscreen.hide-controls * {
+      cursor: none !important;
     }
 
     .help {
@@ -478,9 +511,9 @@
       .url-form { flex-direction: column; }
       .url-form button { padding: 13px; }
       .history-list { grid-template-columns: repeat(2, 1fr); }
-      .player-bar { align-items: flex-start; flex-wrap: wrap; }
-      .status { padding-top: 8px; }
-      .seekbar-wrap { width: 100%; order: 3; padding: 4px 0 0 0; display: flex; }
+      .player-bar { flex-wrap: wrap; }
+      .seekbar-wrap { flex-basis: 100%; order: 5; padding: 6px 6px 8px; }
+      .time-display { margin-left: auto; }
       .controls button { padding: 9px; }
     }
   </style>
@@ -524,6 +557,7 @@
       <div class="video-wrap" id="videoWrap">
         <video id="video" playsinline preload="metadata"></video>
         <div class="speed-indicator" id="speedIndicator">2.0× Speed</div>
+        <div class="status-toast" id="statusToast" role="status" aria-live="polite" hidden></div>
 
         <div class="placeholder" id="placeholder">
           <div class="play-symbol">▶</div>
@@ -533,24 +567,25 @@
       </div>
 
       <div class="player-bar">
-        <div class="status" role="status" aria-live="polite">
-          <span class="dot" id="statusDot"></span>
-          <span id="statusText">Waiting for a stream</span>
-        </div>
+        <button type="button" class="icon-btn" id="playBtn" title="Play / pause" aria-label="Play or pause"></button>
 
-        <div class="seekbar-wrap">
-          <span id="currentTimeDisplay" class="time-display">0:00</span>
+        <div class="seekbar-wrap" id="seekBarWrap">
           <div class="seekbar-track" id="seekBarTrack">
             <div class="seekbar-fill" id="seekBarFill"></div>
+            <div class="seekbar-knob" id="seekBarKnob"></div>
           </div>
-          <span id="durationDisplay" class="time-display">0:00</span>
         </div>
 
+        <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+
         <div class="controls">
-          <button type="button" id="backBtn" title="Back 5 seconds">−5s</button>
-          <button type="button" id="playBtn" title="Play or pause">▶ Play</button>
-          <button type="button" id="forwardBtn" title="Forward 5 seconds">+5s</button>
-          <button type="button" id="fullscreenBtn" title="Fullscreen">⛶ Fullscreen</button>
+          <button type="button" class="icon-btn" id="backBtn" title="Back 5 seconds" aria-label="Back 5 seconds">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18V6l-8.5 6zm.5-6 8.5 6V6z"/></svg>
+          </button>
+          <button type="button" class="icon-btn" id="forwardBtn" title="Forward 5 seconds" aria-label="Forward 5 seconds">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l8.5-6L4 6zm9-12v12l8.5-6z"/></svg>
+          </button>
+          <button type="button" class="icon-btn" id="fullscreenBtn" title="Fullscreen" aria-label="Fullscreen"></button>
         </div>
       </div>
     </section>
@@ -560,6 +595,7 @@
       <span><kbd>→</kbd> Forward 5 seconds</span>
       <span><kbd>Space (hold)</kbd> 2× Speed / (tap) Play-pause</span>
       <span><kbd>Mouse Hold</kbd> 2× Speed</span>
+      <span><kbd>0</kbd>–<kbd>9</kbd> Jump to 0%–90%</span>
       <span><kbd>F</kbd> Fullscreen</span>
     </div>
   </main>
@@ -574,18 +610,38 @@
     const form = document.getElementById("urlForm");
     const urlInput = document.getElementById("streamUrl");
     const placeholder = document.getElementById("placeholder");
-    const statusText = document.getElementById("statusText");
-    const statusDot = document.getElementById("statusDot");
+    const statusToast = document.getElementById("statusToast");
     const playBtn = document.getElementById("playBtn");
     const videoWrap = document.getElementById("videoWrap");
     const playerSection = document.getElementById("playerSection");
     const seekBarTrack = document.getElementById("seekBarTrack");
     const seekBarFill = document.getElementById("seekBarFill");
-    const currentTimeDisplay = document.getElementById("currentTimeDisplay");
-    const durationDisplay = document.getElementById("durationDisplay");
+    const seekBarKnob = document.getElementById("seekBarKnob");
+    const seekBarWrap = document.getElementById("seekBarWrap");
+    const timeDisplay = document.getElementById("timeDisplay");
+    const fullscreenBtn = document.getElementById("fullscreenBtn");
     const speedIndicator = document.getElementById("speedIndicator");
     const historyWrap = document.getElementById("historyWrap");
     const historyList = document.getElementById("historyList");
+
+    const ICONS = {
+      play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
+      pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>',
+      enterFs: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14H5v5h5v-2H7zm-2-4h2V7h3V5H5zm12 7h-3v2h5v-5h-2zM14 5v2h3v3h2V5z"/></svg>',
+      exitFs: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16h3v3h2v-5H5zm3-8H5v2h5V5H8zm6 11h2v-3h3v-2h-5zm2-11V5h-2v5h5V8z"/></svg>'
+    };
+
+    function setPlayIcon(playing) {
+      playBtn.innerHTML = playing ? ICONS.pause : ICONS.play;
+    }
+
+    function setFullscreenIcon(isFs) {
+      fullscreenBtn.innerHTML = isFs ? ICONS.exitFs : ICONS.enterFs;
+      fullscreenBtn.title = isFs ? "Exit fullscreen" : "Fullscreen";
+    }
+
+    setPlayIcon(false);
+    setFullscreenIcon(false);
 
     let hls = null;
     let loadId = 0;
@@ -863,9 +919,11 @@
 
     renderHistory();
 
+    // Status text is only shown for errors; normal states stay silent.
     function setStatus(message, state = "") {
-      statusText.textContent = message;
-      statusDot.className = "dot" + (state ? " " + state : "");
+      const isError = state === "error";
+      statusToast.textContent = isError ? message : "";
+      statusToast.hidden = !isError;
     }
 
     function showPlaceholder(show) {
@@ -891,7 +949,9 @@
     }
 
     function updateSeekBarFill(percent) {
-      seekBarFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+      const p = Math.max(0, Math.min(100, percent));
+      seekBarFill.style.width = `${p}%`;
+      seekBarKnob.style.left = `${p}%`;
     }
 
     function seek(seconds) {
@@ -959,6 +1019,7 @@
     }
 
     document.addEventListener("fullscreenchange", () => {
+      setFullscreenIcon(!!document.fullscreenElement);
       if (document.fullscreenElement) {
         showFullscreenControls();
       } else {
@@ -1022,88 +1083,83 @@
       }
     });
 
-    // Precision Seekbar Alignment Logic
-    function getPercentFromMouseEvent(e, trackRect) {
+    // ---------- Seekbar ----------
+    function getRange() {
+      if (video.seekable.length) {
+        const start = video.seekable.start(0);
+        const end = video.seekable.end(video.seekable.length - 1);
+        if (end > start) return { start, end };
+      }
+      if (Number.isFinite(video.duration) && video.duration > 0) {
+        return { start: 0, end: video.duration };
+      }
+      return null;
+    }
+
+    function updateTimeText(absTime) {
+      const r = getRange();
+      timeDisplay.textContent = r
+        ? `${formatTime(absTime - r.start)} / ${formatTime(r.end - r.start)}`
+        : "0:00 / 0:00";
+    }
+
+    function getPercentFromEvent(e, trackRect) {
       const x = e.clientX - trackRect.left;
       return Math.max(0, Math.min(100, (x / trackRect.width) * 100));
     }
 
     function applySeekFromPercent(percent) {
-      if (video.readyState === 0) return;
-      if (video.seekable.length) {
-        const start = video.seekable.start(0);
-        const end = video.seekable.end(video.seekable.length - 1);
-        video.currentTime = start + (percent / 100) * (end - start);
-      } else if (video.duration) {
-        video.currentTime = (percent / 100) * video.duration;
-      }
+      const r = getRange();
+      if (!r || video.readyState === 0) return;
+      try {
+        video.currentTime = r.start + (percent / 100) * (r.end - r.start);
+      } catch (_) {}
     }
 
-    function updatePreviewFromPercent(percent) {
-      if (video.readyState === 0) return;
-      if (video.seekable.length) {
-        const start = video.seekable.start(0);
-        const end = video.seekable.end(video.seekable.length - 1);
-        const time = start + (percent / 100) * (end - start);
-        currentTimeDisplay.textContent = formatTime(time - start);
-      } else if (video.duration) {
-        const time = (percent / 100) * video.duration;
-        currentTimeDisplay.textContent = formatTime(time);
-      }
-    }
-
-    seekBarTrack.addEventListener("mousedown", (e) => {
-      if (video.readyState === 0) return;
-      isSeeking = true;
-      const trackRect = seekBarTrack.getBoundingClientRect();
-      const percent = getPercentFromMouseEvent(e, trackRect);
-      
+    function previewPercent(percent) {
       updateSeekBarFill(percent);
-      updatePreviewFromPercent(percent);
-      applySeekFromPercent(percent);
+      const r = getRange();
+      if (r) updateTimeText(r.start + (percent / 100) * (r.end - r.start));
+    }
 
-      function onPointerMove(moveEvent) {
-        if (!isSeeking) return;
-        const movePercent = getPercentFromMouseEvent(moveEvent, trackRect);
-        updateSeekBarFill(movePercent);
-        updatePreviewFromPercent(movePercent);
-      }
-
-      function onPointerUp(upEvent) {
-        if (!isSeeking) return;
-        const finalPercent = getPercentFromMouseEvent(upEvent, trackRect);
-        applySeekFromPercent(finalPercent);
-        isSeeking = false;
-        window.removeEventListener("mousemove", onPointerMove);
-        window.removeEventListener("mouseup", onPointerUp);
-      }
-
-      window.addEventListener("mousemove", onPointerMove);
-      window.addEventListener("mouseup", onPointerUp);
-    });
-
-    video.addEventListener("timeupdate", () => {
+    function syncSeekbar() {
       if (isSeeking || video.readyState === 0) return;
+      const r = getRange();
+      if (!r) return;
+      updateSeekBarFill(((video.currentTime - r.start) / (r.end - r.start)) * 100);
+      updateTimeText(video.currentTime);
+    }
 
-      let percent = 0;
-      if (video.seekable.length) {
-        const start = video.seekable.start(0);
-        const end = video.seekable.end(video.seekable.length - 1);
-        const current = video.currentTime;
-        
-        if (end > start) {
-          percent = ((current - start) / (end - start)) * 100;
-        }
-        updateSeekBarFill(percent);
-        currentTimeDisplay.textContent = formatTime(current - start);
-        durationDisplay.textContent = formatTime(end - start);
-      } else if (video.duration) {
-        percent = (video.currentTime / video.duration) * 100;
-        updateSeekBarFill(percent);
-        currentTimeDisplay.textContent = formatTime(video.currentTime);
-        durationDisplay.textContent = formatTime(video.duration);
+    seekBarWrap.addEventListener("pointerdown", (e) => {
+      if (video.readyState === 0 || !getRange()) return;
+      e.preventDefault();
+      isSeeking = true;
+      seekBarWrap.classList.add("dragging");
+
+      const trackRect = seekBarTrack.getBoundingClientRect();
+      previewPercent(getPercentFromEvent(e, trackRect));
+
+      function onMove(ev) {
+        previewPercent(getPercentFromEvent(ev, trackRect));
       }
+
+      function onUp(ev) {
+        applySeekFromPercent(getPercentFromEvent(ev, trackRect));
+        isSeeking = false;
+        seekBarWrap.classList.remove("dragging");
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      }
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
     });
+
+    video.addEventListener("timeupdate", syncSeekbar);
+    video.addEventListener("durationchange", syncSeekbar);
+    video.addEventListener("seeked", syncSeekbar);
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1138,8 +1194,7 @@
       showPlaceholder(false);
       setStatus("Loading stream…");
       updateSeekBarFill(0);
-      currentTimeDisplay.textContent = "0:00";
-      durationDisplay.textContent = "0:00";
+      timeDisplay.textContent = "0:00 / 0:00";
 
       let hasResumedPosition = false;
 
@@ -1177,7 +1232,7 @@
       video.onplaying = () => {
         if (currentLoad !== loadId) return;
         setStatus("Playing", "ready");
-        playBtn.textContent = "Ⅱ Pause";
+        setPlayIcon(true);
         startTimestampSaver();
         if (document.fullscreenElement) {
           showFullscreenControls();
@@ -1186,7 +1241,7 @@
 
       video.onpause = () => {
         if (currentLoad !== loadId) return;
-        playBtn.textContent = "▶ Play";
+        setPlayIcon(false);
         stopTimestampSaver();
         if (currentStreamUrl && video.currentTime > 0 && !video.ended) {
           saveProgress();
@@ -1256,7 +1311,7 @@
     document.getElementById("backBtn").addEventListener("click", () => seek(-5));
     document.getElementById("forwardBtn").addEventListener("click", () => seek(5));
     playBtn.addEventListener("click", togglePlay);
-    document.getElementById("fullscreenBtn").addEventListener("click", toggleFullscreen);
+    fullscreenBtn.addEventListener("click", toggleFullscreen);
 
     // Keyboard controls with Spacebar hold support
     let spacebarHoldTimer = null;
@@ -1301,6 +1356,10 @@
       } else if (event.code === "KeyF") {
         event.preventDefault();
         toggleFullscreen();
+      } else if (/^[0-9]$/.test(event.key) && !event.shiftKey) {
+        event.preventDefault();
+        applySeekFromPercent(Number(event.key) * 10);
+        showFullscreenControls();
       }
     }, true);
 
