@@ -142,49 +142,80 @@
     .history-list {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 12px;
     }
 
-    .history-chip {
+    .history-card {
       background: var(--panel);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 6px 6px 6px 6px;
-      border-radius: 8px;
-      font-size: 12px;
+      border-radius: 10px;
+      width: 210px;
       cursor: pointer;
       display: flex;
-      align-items: center;
-      gap: 10px;
-      max-width: 290px;
-      text-align: left;
-      transition: border-color 0.15s, background 0.15s;
+      flex-direction: column;
+      overflow: hidden;
+      transition: border-color 0.15s, background 0.15s, transform 0.15s;
       position: relative;
     }
 
-    .history-chip:hover {
+    .history-card:hover {
       border-color: var(--accent);
       background: #1c1c21;
     }
 
-    .history-thumb {
-      width: 48px;
-      height: 27px;
+    .history-thumb-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
       background: #000;
-      border-radius: 4px;
-      object-fit: cover;
-      flex-shrink: 0;
     }
 
-    .history-info {
+    .history-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .history-remove-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text);
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      opacity: 0;
+    }
+
+    .history-card:hover .history-remove-btn {
+      opacity: 1;
+    }
+
+    .history-remove-btn:hover {
+      background: #f87171;
+      border-color: #f87171;
+      color: #fff;
+    }
+
+    .history-details {
+      padding: 10px;
       display: flex;
       flex-direction: column;
-      min-width: 0;
-      gap: 2px;
-      flex: 1;
+      gap: 3px;
     }
 
     .history-url {
+      font-size: 12px;
+      font-weight: 500;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -192,28 +223,8 @@
     }
 
     .history-meta {
-      font-size: 10px;
+      font-size: 11px;
       color: var(--muted);
-    }
-
-    .history-remove-btn {
-      background: transparent;
-      border: none;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1;
-      padding: 6px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-      transition: color 0.15s, background 0.15s;
-      flex-shrink: 0;
-    }
-
-    .history-remove-btn:hover {
-      background: rgba(248, 113, 113, 0.15);
-      color: #f87171;
     }
 
     .player {
@@ -451,6 +462,7 @@
       .status { padding-top: 8px; }
       .seekbar-wrap { width: 100%; order: 3; padding: 4px 0 0 0; display: flex; }
       .controls button { padding: 9px; }
+      .history-card { width: 100%; }
     }
   </style>
 </head>
@@ -583,13 +595,16 @@
 
     function saveToHistory(url, thumb = "", time = 0) {
       let history = getHistory();
-      // Remove existing entry for this URL if present
+      // Keep existing thumbnail if a new one isn't provided
+      if (!thumb) {
+        const existing = history.find(item => item.url === url);
+        if (existing && existing.thumb) {
+          thumb = existing.thumb;
+        }
+      }
       history = history.filter(item => item.url !== url);
-      
-      // Add new/updated entry to the front
       history.unshift({ url, thumb, time });
       if (history.length > 8) history.pop();
-      
       localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
       renderHistory();
     }
@@ -610,14 +625,14 @@
     }
 
     function captureThumbnail() {
-      if (video.readyState < 2) return "";
+      if (video.videoWidth === 0 || video.videoHeight === 0) return "";
       try {
         const canvas = document.createElement("canvas");
-        canvas.width = 160;
-        canvas.height = 90;
+        canvas.width = 320;
+        canvas.height = 180;
         const ctx = canvas.getContext("2d");
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        return canvas.toDataURL("image/jpeg", 0.6);
+        return canvas.toDataURL("image/jpeg", 0.7);
       } catch {
         return "";
       }
@@ -631,27 +646,16 @@
       }
       historyList.innerHTML = "";
       history.forEach(item => {
-        const chip = document.createElement("div");
-        chip.className = "history-chip";
+        const card = document.createElement("div");
+        card.className = "history-card";
+
+        const thumbWrap = document.createElement("div");
+        thumbWrap.className = "history-thumb-wrap";
 
         const thumbImg = document.createElement("img");
         thumbImg.className = "history-thumb";
-        thumbImg.src = item.thumb || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='27' viewBox='0 0 48 27'%3E%3Crect width='48' height='27' fill='%23111'/%3E%3C/svg%3E";
+        thumbImg.src = item.thumb || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180' viewBox='0 0 320 180'%3E%3Crect width='320' height='180' fill='%23111'/%3E%3C/svg%3E";
         thumbImg.alt = "";
-
-        const infoDiv = document.createElement("div");
-        infoDiv.className = "history-info";
-
-        const urlSpan = document.createElement("span");
-        urlSpan.className = "history-url";
-        urlSpan.textContent = item.url;
-
-        const metaSpan = document.createElement("span");
-        metaSpan.className = "history-meta";
-        metaSpan.textContent = item.time > 0 ? `Left off at ${formatTime(item.time)}` : "Not started";
-
-        infoDiv.appendChild(urlSpan);
-        infoDiv.appendChild(metaSpan);
 
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
@@ -663,17 +667,33 @@
           removeFromHistory(item.url);
         });
 
-        chip.appendChild(thumbImg);
-        chip.appendChild(infoDiv);
-        chip.appendChild(removeBtn);
-        chip.title = item.url;
+        thumbWrap.appendChild(thumbImg);
+        thumbWrap.appendChild(removeBtn);
 
-        chip.addEventListener("click", () => {
+        const detailsDiv = document.createElement("div");
+        detailsDiv.className = "history-details";
+
+        const urlSpan = document.createElement("span");
+        urlSpan.className = "history-url";
+        urlSpan.textContent = item.url;
+        urlSpan.title = item.url;
+
+        const metaSpan = document.createElement("span");
+        metaSpan.className = "history-meta";
+        metaSpan.textContent = item.time > 0 ? `Left off at ${formatTime(item.time)}` : "Not started";
+
+        detailsDiv.appendChild(urlSpan);
+        detailsDiv.appendChild(metaSpan);
+
+        card.appendChild(thumbWrap);
+        card.appendChild(detailsDiv);
+
+        card.addEventListener("click", () => {
           urlInput.value = item.url;
           form.requestSubmit();
         });
 
-        historyList.appendChild(chip);
+        historyList.appendChild(card);
       });
       historyWrap.hidden = false;
     }
@@ -1008,7 +1028,7 @@
         playBtn.textContent = "Ⅱ Pause";
         startTimestampSaver();
 
-        // Capture thumbnail shortly after playing starts
+        // Capture thumbnail shortly after playing starts and frames are rendering
         setTimeout(() => {
           if (currentLoad === loadId) {
             const thumb = captureThumbnail();
@@ -1018,7 +1038,7 @@
               saveToHistory(currentStreamUrl, thumb, existing ? existing.time : video.currentTime);
             }
           }
-        }, 1000);
+        }, 1200);
 
         if (document.fullscreenElement) {
           showFullscreenControls();
